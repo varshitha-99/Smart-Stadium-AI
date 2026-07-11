@@ -1,0 +1,76 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { Facility } from "./types";
+
+export interface RouteResult {
+  path: { x: number; y: number }[];
+  distance: number;
+  estimatedTime: number;
+  intermediaryText: string;
+}
+
+/**
+ * Calculates a dynamic walking path, distance, and estimated time between two stadium facilities,
+ * taking into account crowd density and security bottlenecks.
+ */
+export function calculateRoute(source: Facility, dest: Facility, facilitiesList: Facility[]): RouteResult {
+  const pathCoordinates = [];
+  pathCoordinates.push({ x: source.x, y: source.y });
+
+  const concourseRadius = 38; // Radius of main stadium ring
+  const angleSource = Math.atan2(source.y - 50, source.x - 50);
+  const angleDest = Math.atan2(dest.y - 50, dest.x - 50);
+
+  const midX1 = Math.round(50 + concourseRadius * Math.cos(angleSource + 0.3));
+  const midY1 = Math.round(50 + concourseRadius * Math.sin(angleSource + 0.3));
+
+  const midX2 = Math.round(50 + concourseRadius * Math.cos(angleDest - 0.3));
+  const midY2 = Math.round(50 + concourseRadius * Math.sin(angleDest - 0.3));
+
+  pathCoordinates.push({ x: midX1, y: midY1 });
+  pathCoordinates.push({ x: midX2, y: midY2 });
+  pathCoordinates.push({ x: dest.x, y: dest.y });
+
+  // Compute walking distance
+  const dx = dest.x - source.x;
+  const dy = dest.y - source.y;
+  const coordinateDistance = Math.sqrt(dx * dx + dy * dy);
+  const metersDistance = Math.round(coordinateDistance * 5.5 + 20); // 1 coordinate unit is approx 5.5 meters
+
+  // Estimated walking time: ~1.2 meters/second. Extra weight if crowd is Critical or High
+  let crowdFactor = 1.0;
+  if (source.crowdLevel === "Critical" || dest.crowdLevel === "Critical") {
+    crowdFactor = 2.2;
+  } else if (source.crowdLevel === "High" || dest.crowdLevel === "High") {
+    crowdFactor = 1.6;
+  } else if (source.crowdLevel === "Medium" || dest.crowdLevel === "Medium") {
+    crowdFactor = 1.2;
+  }
+
+  const estimatedTime = Math.round((metersDistance / 1.2 / 60) * crowdFactor + 1);
+
+  // Find intermediate points names to enrich instructions
+  const nearestIntermediate = facilitiesList
+    .filter(f => f.id !== source.id && f.id !== dest.id)
+    .map(f => {
+      const d = Math.sqrt(Math.pow(f.x - midX1, 2) + Math.pow(f.y - midY1, 2));
+      return { facility: f, distance: d };
+    })
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, 2)
+    .map(item => item.facility.name);
+
+  const intermediaryText = nearestIntermediate.length > 0
+    ? `passing near ${nearestIntermediate.join(" and ")}`
+    : "along the main concourse";
+
+  return {
+    path: pathCoordinates,
+    distance: metersDistance,
+    estimatedTime,
+    intermediaryText,
+  };
+}

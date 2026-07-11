@@ -1,0 +1,111 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { describe, it, expect } from "vitest";
+import { INITIAL_FACILITIES } from "./stadiumData";
+import { calculateRoute } from "./routingUtils";
+import { FacilityType } from "./types";
+
+describe("Stadium Configuration Data", () => {
+  it("should have INITIAL_FACILITIES populated", () => {
+    expect(INITIAL_FACILITIES).toBeDefined();
+    expect(INITIAL_FACILITIES.length).toBeGreaterThan(0);
+  });
+
+  it("should contain unique facility IDs", () => {
+    const ids = INITIAL_FACILITIES.map(f => f.id);
+    const uniqueIds = new Set(ids);
+    expect(ids.length).toBe(uniqueIds.size);
+  });
+
+  it("should contain standard facility types", () => {
+    INITIAL_FACILITIES.forEach(facility => {
+      expect(facility.id).toBeDefined();
+      expect(facility.name).toBeDefined();
+      expect(Object.values(FacilityType)).toContain(facility.type);
+    });
+  });
+
+  it("should position facilities correctly on the coordinate grid (0-100)", () => {
+    INITIAL_FACILITIES.forEach(facility => {
+      expect(facility.x).toBeGreaterThanOrEqual(0);
+      expect(facility.x).toBeLessThanOrEqual(100);
+      expect(facility.y).toBeGreaterThanOrEqual(0);
+      expect(facility.y).toBeLessThanOrEqual(100);
+    });
+  });
+});
+
+describe("AI Smart Routing Algorithm", () => {
+  it("should compute routing path with source and destination coordinates", () => {
+    const source = INITIAL_FACILITIES.find(f => f.id === "gate-a")!;
+    const dest = INITIAL_FACILITIES.find(f => f.id === "gate-c")!;
+    
+    const result = calculateRoute(source, dest, INITIAL_FACILITIES);
+
+    expect(result).toBeDefined();
+    expect(result.path.length).toBe(4); // 4-point circle route
+    expect(result.path[0]).toEqual({ x: source.x, y: source.y });
+    expect(result.path[3]).toEqual({ x: dest.x, y: dest.y });
+  });
+
+  it("should compute distance and walking time correctly", () => {
+    const source = INITIAL_FACILITIES.find(f => f.id === "gate-a")!;
+    const dest = INITIAL_FACILITIES.find(f => f.id === "gate-c")!;
+    
+    const result = calculateRoute(source, dest, INITIAL_FACILITIES);
+
+    expect(result.distance).toBeGreaterThan(0);
+    expect(result.estimatedTime).toBeGreaterThan(0);
+    expect(result.intermediaryText).toBeDefined();
+  });
+
+  it("should apply crowd congestion factors to estimated walking times", () => {
+    const sourceLow = {
+      id: "f-1",
+      name: "Low Crowd facility",
+      type: FacilityType.WASHROOM,
+      description: "Low crowd washroom",
+      capacity: 100,
+      crowdLevel: "Low" as const,
+      crowdPercent: 10,
+      isOpen: true,
+      waitTime: 1,
+      x: 10,
+      y: 10,
+      level: 1,
+      block: "A"
+    };
+
+    const sourceCritical = {
+      ...sourceLow,
+      id: "f-2",
+      crowdLevel: "Critical" as const,
+      crowdPercent: 95
+    };
+
+    const dest = {
+      id: "f-3",
+      name: "Dest facility",
+      type: FacilityType.FOOD_COURT,
+      description: "Food court",
+      capacity: 500,
+      crowdLevel: "Low" as const,
+      crowdPercent: 5,
+      isOpen: true,
+      waitTime: 2,
+      x: 50,
+      y: 50,
+      level: 1,
+      block: "B"
+    };
+
+    const routeLow = calculateRoute(sourceLow, dest, []);
+    const routeCritical = calculateRoute(sourceCritical, dest, []);
+
+    // Higher crowd density at source should result in a higher estimated walking time
+    expect(routeCritical.estimatedTime).toBeGreaterThan(routeLow.estimatedTime);
+  });
+});
